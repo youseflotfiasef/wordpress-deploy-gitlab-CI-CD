@@ -1,0 +1,97 @@
+stages:
+  - build
+  - deploy-dev
+  - deploy-stg
+  - deploy-production
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: ""
+  DOCKER_DIR: "wordpress/Dockerfile"
+  PROJECT_DIR: /opt/$CI_PROJECT_NAME
+  REG_ADDR: registry.devbourse.com
+  REGISTRY_URL_DEV: registry.devbourse.com/microservice/dev/$CI_PROJECT_NAME
+  REGISTRY_URL_STG: registry.devbourse.com/microservice/stg/$CI_PROJECT_NAME
+  REGISTRY_URL_PROD: registry.devbourse.com/microservice/prod/$CI_PROJECT_NAME
+
+Build:
+  stage: build
+  image: registry.devbourse.com/mirror/docker:dind
+  before_script:
+    - export CI_ENV=$CI_COMMIT_SHORT_SHA
+    - export VERSION="test"
+    - export REGISTRY_URL="$REGISTRY_URL_DEV"
+    - if echo "$CI_COMMIT_REF_NAME" | grep -Eq 'stage'; then  export CI_ENV=stg ; export REGISTRY_URL="$REGISTRY_URL_STG"; fi;
+    - if   echo "$CI_COMMIT_REF_NAME" | grep -Eq 'prod'; then  export CI_ENV=prod ; export VERSION="$CI_COMMIT_REF_NAME"; export REGISTRY_URL="$REGISTRY_URL_PROD"; fi
+
+  script:
+    - echo $VERSION  $REGISTRY_URL
+    - docker login -u "$REGISTRY_USER" -p "$REGISTRY_PASS" $REG_ADDR
+    - docker build -t $CI_PROJECT_NAME:$VERSION --build-arg BUILD_ENV=$CI_ENV -f wordpress/Dockerfile .
+    - docker tag $CI_PROJECT_NAME:$VERSION $REGISTRY_URL:$VERSION
+    - docker push "$REGISTRY_URL":"$VERSION"
+  only:
+    - dev
+    - stage
+    - /^v\d{1,9}\.\d{1,9}\.\d{1,9}-[p][r][o][d]$/
+    - cicd-check
+
+Deploy dev:
+   stage: deploy-dev
+   image:  registry.devbourse.com/devops/alpine-pack:v1
+   before_script:
+     - eval $(ssh-agent -s)
+     - echo "$DG_DEV_STG_KEY" > id_rsa
+     - chmod 600 id_rsa
+     - mkdir -p ~/.ssh
+     - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
+     - ssh-add id_rsa
+     - rm id_rsa
+   script:
+     - export VERSION=$CI_COMMIT_SHORT_SHA
+     - export REGISTRY_URL="$REGISTRY_URL_DEV"
+     - envsubst < ci/docker-compose.yml > docker-compose.yml
+     - scp -P8822 docker-compose.yml $DG_CLIENT_DEV:$PROJECT_DIR
+     - ssh -p8822 $DG_CLIENT_DEV "cd $PROJECT_DIR && docker-compose down && docker image rm $REGISTRY_URL:$VERSION && docker-compose up -d"
+   only:
+     - dev
+
+Deploy stage:
+  stage: deploy-stg
+  image:  registry.devbourse.com/devops/alpine-pack:v1
+  before_script:
+    - eval $(ssh-agent -s)
+    - echo "$DG_DEV_STG_KEY" > id_rsa
+    - chmod 600 id_rsa
+    - mkdir -p ~/.ssh
+    - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
+    - ssh-add id_rsa
+    - rm id_rsa
+  script:
+    - export VERSION="$CI_COMMIT_SHORT_SHA"
+    - export REGISTRY_URL="$REGISTRY_URL_STG"
+    - envsubst < ci/docker-compose.yml > docker-compose.yml
+    - scp -P8822 docker-compose.yml $DG_STG_NODE:$PROJECT_DIR
+    - ssh -p8822 $DG_STG_NODE "cd $PROJECT_DIR && docker-compose pull && docker-compose down && docker-compose up -d"
+  only:
+    - stage
+
+Deploy Production:
+  stage: deploy-production
+  image:  registry.devbourse.com/devops/alpine-pack:v1
+  before_script:
+    - eval $(ssh-agent -s)
+    - echo "$DG_FRONT_KEY" > id_rsa
+    - chmod 600 id_rsa
+    - mkdir -p ~/.ssh
+    - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
+    - ssh-add id_rsa
+    - rm id_rsa
+  script:
+    - export VERSION="$CI_COMMIT_TAG"
+    - export REGISTRY_URL="$REGISTRY_URL_PROD"
+    - envsubst < ci/docker-compose.yml > docker-compose.yml
+    - scp -P8822 docker-compose.yml $DG_FRONT_NODE:$PROJECT_DIR-docker
+    - ssh -p8822 $DG_FRONT_NODE "cd $PROJECT_DIR-docker && docker-compose pull && docker-compose down && docker-compose up -d"
+  only:
+    - /^v\d{1,9}\.\d{1,9}\.\d{1,9}-[p][r][o][d]$/
