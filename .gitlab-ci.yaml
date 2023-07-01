@@ -9,14 +9,14 @@ variables:
   DOCKER_TLS_CERTDIR: ""
   DOCKER_DIR: "wordpress/Dockerfile"
   PROJECT_DIR: /opt/$CI_PROJECT_NAME
-  REG_ADDR: registry.devbourse.com
-  REGISTRY_URL_DEV: registry.devbourse.com/microservice/dev/$CI_PROJECT_NAME
-  REGISTRY_URL_STG: registry.devbourse.com/microservice/stg/$CI_PROJECT_NAME
-  REGISTRY_URL_PROD: registry.devbourse.com/microservice/prod/$CI_PROJECT_NAME
+  REG_ADDR: registry.compony.com
+  REGISTRY_URL_DEV: registry.compony.com/microservice/dev/$CI_PROJECT_NAME
+  REGISTRY_URL_STG: registry.compony.com/microservice/stg/$CI_PROJECT_NAME
+  REGISTRY_URL_PROD: registry.compony.com/microservice/prod/$CI_PROJECT_NAME
 
 Build:
   stage: build
-  image: registry.devbourse.com/mirror/docker:dind
+  image: registry.compony.com/mirror/docker:dind
   before_script:
     - export CI_ENV=$CI_COMMIT_SHORT_SHA
     - export VERSION="test"
@@ -38,7 +38,7 @@ Build:
 
 Deploy dev:
    stage: deploy-dev
-   image:  registry.devbourse.com/devops/alpine-pack:v1
+   image:  registry.compony.com/devops/alpine-pack:v1
    before_script:
      - eval $(ssh-agent -s)
      - echo "$DG_DEV_STG_KEY" > id_rsa
@@ -58,7 +58,7 @@ Deploy dev:
 
 Deploy stage:
   stage: deploy-stg
-  image:  registry.devbourse.com/devops/alpine-pack:v1
+  image:  registry.compony.com/devops/alpine-pack:v1
   before_script:
     - eval $(ssh-agent -s)
     - echo "$DG_DEV_STG_KEY" > id_rsa
@@ -78,7 +78,7 @@ Deploy stage:
 
 Deploy Production:
   stage: deploy-production
-  image:  registry.devbourse.com/devops/alpine-pack:v1
+  image:  registry.compony.com/devops/alpine-pack:v1
   before_script:
     - eval $(ssh-agent -s)
     - echo "$DG_FRONT_KEY" > id_rsa

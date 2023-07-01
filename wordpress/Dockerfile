@@ -1,4 +1,4 @@
-FROM registry.devbourse.com/mirror/php:7.0-apache AS builder
+FROM registry.compony.com/mirror/php:7.0-apache AS builder
 ARG BUILD_ENV
 
 COPY php.ini /usr/local/etc/php/
